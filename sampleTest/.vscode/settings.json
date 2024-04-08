@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "kernel.h": "c",
+        "kernel_includes.h": "c"
+    }
+}
