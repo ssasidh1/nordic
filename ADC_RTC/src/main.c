@@ -7,7 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(Lesson6_Exercise3, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(Lesson6_Exercise3, LOG_LEVEL_INF);
 
 /* STEP 3 - Include header for nrfx drivers */
 #include <nrfx_saadc.h>
@@ -37,20 +37,21 @@ static uint32_t saadc_current_buffer = 0;
 
 static void rtc_handler(nrfx_rtc_int_type_t int_type)
 {
-        nrfx_err_t err;
+    nrfx_err_t err;
 	switch (int_type)
 	{
 		case NRFX_RTC_INT_TICK:
-			printk("tick interrupt received\n");
+		//	printk("tick interrupt received\n");
 			break;
 		case NRFX_RTC_INT_COMPARE0:
 		{
 			printk("compare 0 event received\n");
-			err = nrfx_rtc_cc_set(&timer_instance, 0, 1, true);
+			//err = nrfx_rtc_cc_set(&timer_instance, 0, 1, true);
 			if(err!=NRFX_SUCCESS)
 			{
 				printk(" compare channel initialization error %d",err);
 			}
+            break;
 		}
 		default:
 			printk("rtc interrupt %d\n", int_type);
@@ -64,11 +65,11 @@ static void configure_RTC(void)
 
     /* STEP 4.3 - Declaring timer config and intialize nrfx_timer instance. */
     nrfx_rtc_config_t timer_config = NRFX_RTC_DEFAULT_CONFIG;
-    timer_config.prescaler = 4095;
+    timer_config.prescaler = NRF_RTC_FREQ_TO_PRESCALER(400) ;
 
     IRQ_CONNECT(DT_IRQN(DT_NODELABEL(rtc2)),
                 DT_IRQ(DT_NODELABEL(rtc2), priority),
-                nrfx_rtc_2_irq_handler, NULL, 0);
+                nrfx_rtc_2_irq_handler, NULL, 0);  
 
     err = nrfx_rtc_init(&timer_instance, &timer_config, rtc_handler);
 
@@ -76,14 +77,16 @@ static void configure_RTC(void)
         LOG_ERR("nrfx_timer_init error: %08x", err);
         return;
     }
+     nrfx_rtc_tick_enable(&timer_instance, true);
+
 
     /* STEP 4.4 - Set compare channel 0 to generate event every SAADC_SAMPLE_INTERVAL_US. */
-    err = nrfx_rtc_cc_set(&timer_instance, 0, 1, true);
-    if(err!=NRFX_SUCCESS)
-    {
-     printk(" compare channel initialization error %d",err);
-    }
-    //nrfx_rtc_enable(&timer_instance);
+    // err = nrfx_rtc_cc_set(&timer_instance, 0, 1, true);
+    // if(err!=NRFX_SUCCESS)
+    // {
+    //  printk(" compare channel initialization error %d",err);
+    // }
+    nrfx_rtc_enable(&timer_instance);
 
 }
 
@@ -95,11 +98,12 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
         case NRFX_SAADC_EVT_READY:
         
            /* STEP 6.1 - Buffer is ready, timer (and sampling) can be started. */
+            ////LOG_INF("Inside SAADC EVT READY");
             nrfx_rtc_enable(&timer_instance);
             break;                        
             
         case NRFX_SAADC_EVT_BUF_REQ:
-        
+        //LOG_INF("Inside SAADC EVT REQ");
             /* STEP 6.2 - Set up the next available buffer. Alternate between buffer 0 and 1 */
             err = nrfx_saadc_buffer_set(saadc_sample_buffer[(saadc_current_buffer++)%2], SAADC_BUFFER_SIZE);
             //err = nrfx_saadc_buffer_set(saadc_sample_buffer[((saadc_current_buffer == 0 )? saadc_current_buffer++ : 0)], SAADC_BUFFER_SIZE);
@@ -115,6 +119,7 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
             int64_t average = 0;
             int16_t max = INT16_MIN;
             int16_t min = INT16_MAX;
+           printk("--samples--\n");
             for(int i=0; i < p_event->data.done.size; i++){
                 average += p_event->data.done.p_buffer[i];
                 if((int16_t)p_event->data.done.p_buffer[i] > max){
@@ -123,14 +128,17 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
                 if((int16_t)p_event->data.done.p_buffer[i] < min){
                     min = p_event->data.done.p_buffer[i];
                 }
+                // printk("%d ",p_event->data.done.p_buffer[i]);
+                // if(i%100==0)printk("\n");
             }
+            printk("----\n");
             average = average/p_event->data.done.size;
             LOG_INF("SAADC buffer at 0x%x filled with %d samples", (uint32_t)p_event->data.done.p_buffer, p_event->data.done.size);
             LOG_INF("AVG=%d, MIN=%d, MAX=%d", (int16_t)average, min, max);
             break;
 
         default:
-            LOG_INF("Unhandled SAADC evt %d", p_event->type);
+            //LOG_INF("Unhandled SAADC evt %d", p_event->type);
             break;
     }
 }
@@ -210,12 +218,12 @@ static void configure_ppi(void)
 	}
 
     /* STEP 7.3 - Trigger task sample from timer */
-    
+    //nrfx_rtc_cc_set()
    	 nrfx_gppi_channel_endpoints_setup(m_saadc_sample_ppi_channel, 
-	                                   nrfx_rtc_event_address_get(&timer_instance, NRF_RTC_EVENT_COMPARE_0),
+	                                   nrfx_rtc_event_address_get(&timer_instance, NRF_RTC_EVENT_TICK),
 	                                   nrf_saadc_task_address_get(NRF_SAADC,NRF_SAADC_TASK_SAMPLE));
 
-       nrfx_gppi_channel_endpoints_setup(m_saadc_start_ppi_channel, 
+     nrfx_gppi_channel_endpoints_setup(m_saadc_start_ppi_channel, 
                                       nrf_saadc_event_address_get(NRF_SAADC, NRF_SAADC_EVENT_END),
                                       nrf_saadc_task_address_get(NRF_SAADC, NRF_SAADC_TASK_START));
 	
@@ -224,8 +232,8 @@ static void configure_ppi(void)
 		printk(" PPI channel assignment error %d",err);
 	}
 
-	nrfx_ppi_channel_enable(m_saadc_sample_ppi_channel);
-        nrfx_gppi_channels_enable(BIT(m_saadc_start_ppi_channel));
+	nrfx_gppi_channels_enable(BIT(m_saadc_sample_ppi_channel));
+    nrfx_gppi_channels_enable(BIT(m_saadc_start_ppi_channel));
 
 	if(err!=NRFX_SUCCESS)
 	{
@@ -236,8 +244,11 @@ static void configure_ppi(void)
 
 int main(void)
 {
+    LOG_INF("Started");
     configure_RTC();
     configure_saadc();  
     configure_ppi();
+    LOG_INF("config done: logger");
+    printk("config done\n");
     k_sleep(K_FOREVER);
 }

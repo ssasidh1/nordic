@@ -7,7 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(Lesson6_Exercise3, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(Lesson6_Exercise3, LOG_LEVEL_INF);
 
 /* STEP 3 - Include header for nrfx drivers */
 #include <nrfx_saadc.h>
@@ -58,13 +58,14 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
     switch (p_event->type)
     {
         case NRFX_SAADC_EVT_READY:
-        
+            
            /* STEP 6.1 - Buffer is ready, timer (and sampling) can be started. */
             nrfx_timer_enable(&timer_instance);
             break;                        
-            
+
         case NRFX_SAADC_EVT_BUF_REQ:
-        
+            LOG_ERR("Inside SAADC EVT REQ %d",(saadc_current_buffer+1)%2);
+            LOG_ERR("Req event buffer addr %p",saadc_sample_buffer[(saadc_current_buffer+1)%2]);
             /* STEP 6.2 - Set up the next available buffer. Alternate between buffer 0 and 1 */
             err = nrfx_saadc_buffer_set(saadc_sample_buffer[(saadc_current_buffer++)%2], SAADC_BUFFER_SIZE);
             //err = nrfx_saadc_buffer_set(saadc_sample_buffer[((saadc_current_buffer == 0 )? saadc_current_buffer++ : 0)], SAADC_BUFFER_SIZE);
@@ -80,6 +81,7 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
             int64_t average = 0;
             int16_t max = INT16_MIN;
             int16_t min = INT16_MAX;
+            LOG_ERR("Done event buffer addr %p",p_event->data.done.p_buffer);
             for(int i=0; i < p_event->data.done.size; i++){
                 average += p_event->data.done.p_buffer[i];
                 if((int16_t)p_event->data.done.p_buffer[i] > max){
@@ -89,6 +91,7 @@ static void saadc_event_handler(nrfx_saadc_evt_t const * p_event)
                     min = p_event->data.done.p_buffer[i];
                 }
             }
+            LOG_ERR("Inside SAADC EVT DONE");
             average = average/p_event->data.done.size;
             LOG_INF("SAADC buffer at 0x%x filled with %d samples", (uint32_t)p_event->data.done.p_buffer, p_event->data.done.size);
             LOG_INF("AVG=%d, MIN=%d, MAX=%d", (int16_t)average, min, max);
@@ -146,11 +149,11 @@ static void configure_saadc(void)
         LOG_ERR("nrfx_saadc_buffer_set error: %08x", err);
         return;
     }
-    err = nrfx_saadc_buffer_set(saadc_sample_buffer[1], SAADC_BUFFER_SIZE);
-    if (err != NRFX_SUCCESS) {
-        LOG_ERR("nrfx_saadc_buffer_set error: %08x", err);
-        return;
-    }
+    // err = nrfx_saadc_buffer_set(saadc_sample_buffer[1], SAADC_BUFFER_SIZE);
+    // if (err != NRFX_SUCCESS) {
+    //     LOG_ERR("nrfx_saadc_buffer_set error: %08x", err);
+    //     return;
+    // }
 
     /* STEP 5.10 - Trigger the SAADC. This will not start sampling, but will prepare buffer for sampling triggered through PPI */
     err = nrfx_saadc_mode_trigger();
